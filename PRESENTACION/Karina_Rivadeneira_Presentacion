@@ -1,0 +1,272 @@
+---
+title: "Informe descriptivo de datos provenientes de un diseño muestral complejo"
+author: "Rivadeneira Karina"
+date: "October 21, 2018"
+output:
+  ioslides_presentation: default
+  slidy_presentation: default
+  beamer_presentation: default
+---
+```{r setup, include = FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+```{r yodo, eval = TRUE, echo = FALSE, include = FALSE, results="hide", comment=""}
+require(RPostgreSQL)
+library(tidyverse)
+require(readxl)
+MstOrn <- read_excel("MstOrn.xlsx")
+yodo <- MstOrn$r_mst_rsl_ydo
+min <- round(min(yodo),2)
+max <- round(max(yodo),2)
+NumFilas <- length(MstOrn$r_mst_rsl_ydo)
+promedio <- round(mean(yodo),2)
+dsv_est <- round(sd(yodo),2)
+EDA_modificado <- function (x, trim = 0.05) {
+  require(e1071)
+  Altblue <- "#A9E2FF"
+  Adkblue <- "#0080FF"
+  Ared <- "#C51111"
+  varname <- deparse(substitute(x))
+  N <- length(x)
+  UM <- sum(is.na(x))
+  n <- N - UM
+  x <- x[!(is.na(x) > 0)]
+  LQ1 <- (n + 1)/4
+  LQ3 <- (3 * (n + 1))/4
+  Sort <- sort(x)
+  V1 <- floor(LQ1)
+  V2 <- floor(LQ3)
+  V3 <- V1 + 1
+  V4 <- V2 + 1
+  Q1 <- round(Sort[V1] + (LQ1 - V1) * (Sort[V3] - Sort[V1]), 
+              3)
+  Q3 <- round(Sort[V2] + (LQ3 - V2) * (Sort[V4] - Sort[V2]), 
+              3)
+  IQR <- round(Q3 - Q1, 3)
+  Min <- round(min(x), 3)
+  Max <- round(max(x), 3)
+  Stdev <- round(sd(x, na.rm = TRUE), 3)
+  Mean <- round(mean(x, na.rm = TRUE), 3)
+  Median <- round(median(x, na.rm = TRUE), 3)
+  TrMean <- round(mean(x, trim = trim), 3)
+  Var <- round(var(x, na.rm = TRUE), 3)
+  SE <- round(Stdev/sqrt(n), 3)
+  Range <- round(Max - Min, 3)
+  par(omi = c(0, 0, 0, 0))
+  #par(mfrow = c(2, 2))
+  par(mar = c(4, 4, 2, 2))
+  par(pty = "s")
+  print(varname)
+  hist(x, probability = TRUE, col = Adkblue, xlab = "", ylab = "", 
+       #axes = FALSE, main = paste("Histogram of", varname))
+       axes = TRUE, main = paste("Histograma de", varname))
+  box()
+  iqd <- summary(x)[5] - summary(x)[2]
+  plot(density(x, width = 2 * iqd, na.rm = TRUE), xlab = "", 
+       # ylab = "", axes = FALSE, type = "n", main = paste("Density of", 
+       #                                                   varname))
+       ylab = "", axes = TRUE, type = "n", main = paste("Densidad de", 
+                                                        varname))
+  lines(density(x, width = 2 * iqd, na.rm = TRUE), col = Ared)
+  box()
+  l.out <- x[x < (Q1 - 1.5 * IQR)]
+  r.out <- x[x > (Q3 + 1.5 * IQR)]
+  outliers <- c(l.out, r.out)
+  rest <- x[x > (Q1 - 1.5 * IQR) & x < (Q3 + 1.5 * IQR)]
+  Minrest <- min(rest)
+  Maxrest <- max(rest)
+  plot(x, x, main = paste("Boxplot de", varname), xlab = "", 
+       ylab = "", axes = TRUE, type = "n", xlim = c(min(x), 
+                                                    max(x)), ylim = c(0, 1))
+  box()
+  polygon(c(Q1, Q1, Q3, Q3), c(0.3, 0.7, 0.7, 0.3), density = -1, 
+          col = Altblue)
+  points(outliers, c(rep(0.5, length(outliers))), col = Ared)
+  lines(c(min(rest), Q1), c(0.5, 0.5), lty = 1)
+  lines(c(Q3, max(rest)), c(0.5, 0.5), lty = 1)
+  lines(c(min(rest), min(rest)), c(0.4, 0.6))
+  lines(c(max(rest), max(rest)), c(0.4, 0.6))
+  lines(c(Q1, Q1), c(0.3, 0.7))
+  lines(c(Q3, Q3), c(0.3, 0.7))
+  lines(c(Median, Median), c(0.3, 0.7))
+  lines(c(Q1, Q3), c(0.3, 0.3))
+  lines(c(Q1, Q3), c(0.7, 0.7))
+  points(Mean, 0.5, pch = 16, col = "black")
+  # qqnorm(x, col = "black", main = paste("Q-Q Plot of", varname), 
+  #        xlab = "", ylab = "", axes = FALSE)
+  qqnorm(x, col = "black", main = paste("Grafico Q-Q de", varname), 
+         xlab = "Cuantiles teóricos", ylab = "Cuantiles muestrales", axes = TRUE)
+  qqline(x, col = Ared)
+  box()
+  # mtext("EXPLORATORY  DATA  ANALYSIS", side = 3, outer = TRUE, 
+  #       cex = 1.5, col = Adkblue, line = 1)
+  # mtext("Analisis exploratorio de datos", side = 3, outer = TRUE, 
+  #       cex = 1.5, col = Adkblue, line = 1)
+  par(oma = c(0, 0, 0, 0))
+  par(mfrow = c(1, 1))
+  par(mar = c(0, 6, 3, 2))
+  par(omi = c(0, 0, 0, 0))
+  par(pty = "m")
+  SW <- shapiro.test(x)
+  K <- round(kurtosis(x), 3)
+  S <- round(skewness(x), 3)
+  SWpval <- round(SW$p.value, 3)
+  TOT <- c(n, UM, Min, Q1, Mean, Median, TrMean, Q3, Max, Stdev, 
+           Var, SE, IQR, Range, K, S, SWpval)
+  # #names(TOT) <- c("Size (n)", "Missing", "Minimum", " 1st Qu", 
+  #                 "   Mean", " Median", "TrMean", " 3rd Qu", "   Max.", 
+  #                 " Stdev.", "   Var.", "SE Mean", " I.Q.R.", "  Range", 
+  #                 "Kurtosis", "Skewness", "SW p-val")
+  names(TOT) <- c("Tamaño (n)", "Datos_Perdidos", "Minimo", "1st Qu", 
+                  "Media", "Mediana", "TrMean", " 3rd Qu", "Maximo", 
+                  "Dsv_Est", "Varianza", "SE Mean", "I.Q.R.", "Rango", 
+                  "Curtosis (EC)", "CA", "p_valor")
+  #return(TOT)
+  ind <- which(x %in% outliers)
+  valor <- list(Res=TOT,anomalos=outliers,pos=ind) 
+  return(valor)
+}
+EDA <- EDA_modificado(yodo)
+Medidas <- round(data.frame(Res=EDA$Res)[1],2)
+```
+## 1.- Análisis exploratorio de datos
+
+Se tiene `r NumFilas` alumnos perteneciente a la muestra de los cuales se tomó una muestra de orina que fue analizada en laboratorio para obtener la cantidad de yodo que contiene cada individuo. Las cantidades extremas como la cantidad mínimo de yodo en la orina es de `r min` µg/l y la máxima es de `r max` µg/l. La cantidad promedio de yodo es `r promedio` µg/l. En promedio, la cantidad de yodo se desvía de la media la cantidad de `r dsv_est` µg/l.
+
+##
+
+```{r,echo = FALSE}
+boxplot(yodo, las = 1,col = '#98B1DD', xlab=' ', horizontal = TRUE)
+```
+Figura 1. Boxplot de la ingesta de yodo
+
+##
+
+```{r,echo = FALSE}
+hist(yodo,main = " ", xlab = "Yodo en orina", ylab="Cantidad de alumnos", include.lowest = TRUE)
+```
+Figura 2. Histograma de la ingesta de yodo de los alumnos muestreados
+
+##
+
+El 50% de alumnos tienen una ingesta de yodo dentro del rango `r Medidas[4,1]` y `r Medidas[8,1]` µg/l. Según la OMS, el 25% de alumnos estarían dentro de un nivel óptimo (132.95-220.58 µg/l), mientras que, menos del 25% tiene una deficiencia (leve, moderada o grave) y un 50% de alumnos está por encima del nivel (o con exceso) de yodo en la orina.
+
+##
+
+```{r, echo = FALSE}
+#PrvEscTtl <- select(MstOrn,Provincia=s_prv_nme) %>% group_by(Provincia) %>% count(Provincia)
+#DT::datatable(PrvEscTtl)
+qqnorm(yodo, col = "black",main = "", xlab = "Cuantiles teóricos", ylab = "Cuantiles muestrales", axes = TRUE)
+qqline(yodo, col = "red")
+```
+
+Figura 3. Gráfico Q-Q de ingesta de yodo
+
+Se puede observar que existe una ingesta registrada que está fuera de los registros normales, (valor atípico: 586.58), este valor será retirado del análisis.
+
+```{r yodo_dts_prd, eval = TRUE, echo = FALSE, include = FALSE, results="hide"}
+require(RPostgreSQL)
+library(tidyverse)
+MstOrn <- read_excel("MstOrn.xlsx")
+corte1 <- MstOrn[c(1:136),]
+corte2 <- MstOrn[c(138:289),]
+MstOrn <- bind_rows(corte1,corte2)
+yodo <- MstOrn$r_mst_rsl_ydo
+min <- round(min(yodo),2)
+max <- round(max(yodo),2)
+NumFilas <- length(MstOrn$r_mst_rsl_ydo)
+promedio <- round(mean(yodo),2)
+dsv_est <- round(sd(yodo),2)
+Stdev <- round(sd(yodo, na.rm = TRUE), 3)
+EDA <- EDA_modificado(yodo)
+Medidas <- round(data.frame(Res=EDA$Res)[1],2)
+MedidasPosicion <- round(summary(yodo),2)
+```
+## 2.- Análisis exploratorio de los datos sin valores atípicos
+
+Sin los registros fuera de lo normal, se tiene `r NumFilas` alumnos perteneciente a la muestra de los cuales se tomó una muestra de orina que fue analizada en laboratorio para obtener la ingesta de yodo de cada individuo. Los valores extremos como la ingesta mínima reportada de yodo en la orina son de `r min` µg/l y la máxima es de `r max` µg/l. La cantidad promedio de yodo es `r promedio` µg/l. En promedio, la cantidad de yodo se desvía de la media la cantidad de `r dsv_est` µg/l. 
+
+##
+
+```{r,echo = FALSE}
+boxplot(yodo, las = 1,col = '#98B1DD', xlab=' ', horizontal = TRUE)
+```
+
+Figura 4. Boxplot de la ingesta de yodo
+
+##
+
+```{r,echo = FALSE}
+hist(yodo,main = " ", xlab = "Yodo en orina", ylab="Cantidad de alumnos", include.lowest = TRUE)
+```
+
+Figura 5. Histograma de la ingesta de yodo de los alumnos muestreados y su gráfico de densidad
+
+##
+
+El 50% de la población muestreada tiene una ingesta por encima de 213.33 µg/l. Según la OMS, no se encontrarían con deficiencia de yodo en la orina.
+
+Al nivel de confianza del 5%, se revela que no hay diferencia significativa en la ingesta media de yodo de los alumnos dependiendo del área urbana y rural donde se encuentra ubicada la escuela, o por el sexo del alumno, mientras que se revela una dependencia entre la ingesta de yodo y la provincia de residencia del alumno; algunas provincias tienen ingesta media diferente. 
+
+Se desea revelar si existe alguna relación entre la cantidad de yodo de una muestra de sal de consumo en los hogares (procedimiento dado por la OMS), con la ingesta del alumno. Se observa el gráfico de dispersión:
+
+##
+
+```{r,echo = FALSE}
+plot(MstOrn$r_mst_rsl_ydo, MstOrn$yodo_sal, xlim = c(0,320), ylim = c(0,50), ylab="yodo_sal (ppm)", xlab="yodo_ingesta (µg/l)")
+```
+
+Figura 6. Relación entre la ingesta de yodo y la cantidad de yodo que tienen la sal consumida en el hogar
+
+## 
+
+No existe relación lineal entre la cantidad de yodo en la orina y la cantidad de yodo en la sal de consumo del hogar. Se puede concluir que se sabe la existencia de la relación entre estos factores pero como la concentración de la sal de hogar ya está regulada por normativas internacionales no se puede observar una relación entre la deficiencia de la concentración de yodo en la orina y el consumo de sal yodada.  Por lo tanto, en este caso una regresión lineal no aportaría para una predicción. 
+
+## Comparación de peso del alumno con respecto a la talla
+
+Se desea observa una relación entre la estatura y el peso del alumno por lo que se puede realizar una predicción basándose en la estatura del alumno
+
+```{r yodo_reg, eval = TRUE, echo = FALSE, include = FALSE, results="hide"}
+require(readxl)
+require(ggplot2)
+datos_ensanut <- read_excel("temp.xlsx")
+mod_1 <- lm(peso2_dbl ~ talla2_dbl, data = datos_ensanut)
+Intercept <- round(mod_1$coefficients[1],2)
+rgrLna_talla2_db <- round(mod_1$coefficients[2],2)
+summary(mod_1)
+```
+##
+
+```{r, echo = FALSE, message=FALSE, warning=FALSE}
+datos_ensanut %>%
+  ggplot(., aes(x= talla2_dbl)) + ylab("Peso") +
+  geom_point(aes(y= peso2_dbl)) + xlab("Talla")
+```
+
+Figura 7. Relación entre la talla y el peso del alumno
+
+##
+
+El modelo obtenido es: `r Intercept` + `r rgrLna_talla2_db`*Talla, es decir, por cada centímetro que un alumno aumenta en talla, pesa `r rgrLna_talla2_db` más, esto partiendo de una base de `r Intercept` (no real).
+
+Se puede ver que el coeficiente de determinación R2 ajustado es igual a 0.7743 lo cual indica que el modelo explica el 77.43% de la varianza de la variable Peso, lo cual se podría decir que es un “buen” ajuste.
+
+##
+
+```{r, echo = FALSE, message=FALSE, warning=FALSE}
+require(modelr)
+## Crea una tabla de datos base para predecir
+grid <- datos_ensanut %>% data_grid(talla2_dbl) 
+grid <- grid %>% add_predictions(mod_1, var = 'PREDIC')
+datos_ensanut %>% ggplot(., aes(x= talla2_dbl)) + geom_point(aes(y= peso2_dbl)) + geom_line(aes(y= PREDIC), data = grid, colour = "red", size = 1) + xlab("Talla") + ylab("Peso")
+```
+
+Esto permitirá comparar el exceso o bajo peso de algunos alumnos con respecto a nuestra regresión lineal.
+
+## 3.- Conclusiones
+
+3.1) La mediana de la concentración de yodo en orina fue de 213.13 µg/l que se encuentra fuera del nivel nutricional óptimo, es más de lo requerido en yodo;
+
+3.2) Los valores de las medianas en forma nacional por región, por área (urbana y rural) resultantes según la OMS, estarían por encima de la cantidad necesaria y en algunos casos en exceso de yodo urinario;
+
+3.3) No existe relación lineal entre el consumo de sal en el hogar y la concentración de yodo urinario en los alumnos.
